@@ -20,7 +20,7 @@ window.App = window.App || {};
 
   /* 2FA real: alta del autenticador (QR de Supabase) + verificación del primer código */
   function activar2FA() {
-    App.sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "Sistema Tiendas" }).then(function (r) {
+    App.sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "NAO" }).then(function (r) {
       if (r.error) { App.toast(r.error.message, "err"); return; }
       var f = r.data;
       var verificado = false;
@@ -209,8 +209,8 @@ window.App = window.App || {};
         "</div>";
 
       html += App.MODO_NUBE
-        ? '<div class="small muted" style="margin:16px 4px">Sistema La Teacher · En Vzla - versión online. Datos y cuentas protegidos en el servidor; funciona en todos tus dispositivos.</div></div>'
-        : '<div class="small muted" style="margin:16px 4px">Sistema La Teacher · En Vzla - prototipo v0.1 (local). ' +
+        ? '<div class="small muted" style="margin:16px 4px">NAO - versión online. Datos y cuentas protegidos en el servidor; funciona en todos tus dispositivos.</div></div>'
+        : '<div class="small muted" style="margin:16px 4px">NAO - modo local (sin conexión configurada). ' +
         "Fase 2: versión online con seguridad real, tasa BCV automática, lectura de guías con IA y notificaciones.</div></div>";
 
       el.innerHTML = html;

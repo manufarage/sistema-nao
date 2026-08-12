@@ -86,7 +86,7 @@ window.App = window.App || {};
         '<div class="field"><label>Desde</label><input class="input" id="pm-desde" type="date" value="' + FP.desde + '"></div>' +
         '<div class="field"><label>Hasta</label><input class="input" id="pm-hasta" type="date" value="' + FP.hasta + '"></div>' +
         "</div>" +
-        '<h3 style="margin-top:6px">🧸 Productos del combo</h3>' +
+        '<h3 style="margin-top:6px">📦 Productos del combo</h3>' +
         '<div class="search-bar" style="margin-top:6px">' + App.icon("buscar") + '<input class="input" id="pm-bus" placeholder="Buscar producto…"></div>' +
         '<div class="list" id="pm-res"></div><div id="pm-items"></div>' +
         '<div class="field" style="margin-top:10px"><label>Precio del combo (USD)</label>' +

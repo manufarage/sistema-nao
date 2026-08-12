@@ -108,9 +108,9 @@ window.App = window.App || {};
       var puedeBio = App.bioActivo && App.bioActivo();
       root.innerHTML =
         '<div class="login-card view">' +
-        '<div class="logo-mark">🧸</div>' +
-        '<div class="login-title">La Teacher · En Vzla</div>' +
-        '<div class="login-sub">Entra con tu cuenta</div>' +
+        '<div class="logo-mark">⚓</div>' +
+        '<div class="login-title">NAO</div>' +
+        '<div class="login-sub">Sistema de gestión</div>' +
         '<form id="f-login-nube">' +
         '<div class="field"><label>Email</label><input class="input" name="email" type="email" autocomplete="username" required></div>' +
         '<div class="field"><label>Contraseña</label><input class="input" name="clave" type="password" autocomplete="current-password" required></div>' +
@@ -175,8 +175,8 @@ window.App = window.App || {};
 
     root.innerHTML =
       '<div class="login-card view">' +
-      '<div class="logo-mark">🧸</div>' +
-      '<div class="login-title">La Teacher · En Vzla</div>' +
+      '<div class="logo-mark">⚓</div>' +
+      '<div class="login-title">NAO</div>' +
       '<div class="login-sub">Sistema de gestión de tus tiendas</div>' +
       '<form id="f-login">' +
       '<div class="field"><label>Email</label><input class="input" name="email" type="email" autocomplete="username" value="admin@tienda.com" required></div>' +
@@ -373,7 +373,7 @@ window.App = window.App || {};
       navigator.credentials.create({
         publicKey: {
           challenge: reto,
-          rp: { name: "La Teacher · En Vzla" },
+          rp: { name: "NAO" },
           user: { id: uid, name: App.auth.user.email || App.auth.user.nombre || "usuario", displayName: App.auth.user.nombre || "Usuario" },
           pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
           /* sin authenticatorAttachment: el navegador ofrece TODAS las opciones

@@ -8,43 +8,17 @@ window.App = window.App || {};
   var C = null;
   var filtroDesp = null; // filtro por agencia del bloque "Para despachar"
 
-  /* Resumen del lado agente de compras. Se pinta solo si el módulo está
-     cargado y el usuario tiene permiso; un socio de tienda no lo ve. */
-  function tarjetaImportaciones() {
-    if (!App.modImportaciones || !App.auth.puede("importaciones")) return "";
-    var imps = (App.db.importaciones || []).filter(function (i) { return i.estado !== "cerrada"; });
-    var avisos = 0;
-    if (App.modTareas && typeof App.modTareas.pendientes === "function") {
-      try { avisos = App.modTareas.pendientes() || 0; } catch (e) { avisos = 0; }
-    }
-    if (!imps.length && !avisos) return "";
-
-    var porCobrar = 0, porPagar = 0, ganancia = 0;
-    if (typeof App.modImportaciones.saldos === "function") {
-      imps.forEach(function (i) {
-        var sa = App.modImportaciones.saldos(i);
-        if (!sa) return;
-        porCobrar += Math.max(0, +sa.saldoCliente || 0);
-        porPagar += Math.max(0, +sa.saldoFabrica || 0);
-        ganancia += +sa.miComision || 0;
-      });
-    }
-
-    return '<div class="card section-gap"><div class="card-head"><h2>' + App.icon("orden") +
-      " Importaciones</h2>" +
-      (avisos ? '<button class="btn sm ghost" data-ir="tareas">' + avisos + " por atender</button>" : "") +
-      "</div>" +
-      '<div class="grid-kpi" style="margin-bottom:0">' +
-      '<div class="kpi" data-ir="importaciones" style="cursor:pointer"><div class="kpi-label">En curso</div>' +
-      '<div class="kpi-value">' + imps.length + "</div></div>" +
-      '<div class="kpi" data-ir="importaciones" style="cursor:pointer"><div class="kpi-label">Falta cobrar</div>' +
-      '<div class="kpi-value num" style="color:var(--warn)">' + App.fmt.usd(porCobrar) + "</div></div>" +
-      '<div class="kpi" data-ir="importaciones" style="cursor:pointer"><div class="kpi-label">Falta pagar a fábricas</div>' +
-      '<div class="kpi-value num" style="color:var(--danger)">' + App.fmt.usd(porPagar) + "</div></div>" +
-      '<div class="kpi" data-ir="importaciones" style="cursor:pointer"><div class="kpi-label">Ganancia comprometida</div>' +
-      '<div class="kpi-value num" style="color:var(--ok)">' + App.fmt.usd(ganancia) + "</div></div>" +
-      "</div></div>";
-  }
+  /* Los 11 estados de una importación, resumidos en las 7 etapas que se
+     entienden de un vistazo (el detalle fino vive en Importaciones) */
+  var ETAPAS = [
+    { l: "Cotización", emoji: "📝", ids: ["cotizada", "proforma"] },
+    { l: "Anticipo", emoji: "💵", ids: ["anticipo"] },
+    { l: "Producción", emoji: "🏭", ids: ["produccion", "lista"] },
+    { l: "En almacén", emoji: "📦", ids: ["almacen"] },
+    { l: "Navegando", emoji: "🚢", ids: ["embarcada", "transito"] },
+    { l: "Llegó", emoji: "🛬", ids: ["llegada"] },
+    { l: "Entregada", emoji: "🤝", ids: ["entregada"] }
+  ];
 
   App.modDashboard = {
     id: "dashboard",
@@ -52,6 +26,205 @@ window.App = window.App || {};
     icono: "inicio",
     render: function (el) {
       C = App.calc;
+      /* dos inicios: el del agente de compras (Manuel) y el clásico de
+         tienda (socio / vendedor, que no ve importaciones) */
+      if (App.modImportaciones && App.auth.puede("importaciones")) { renderAgente(el); return; }
+      renderTienda(el);
+    }
+  };
+
+  /* ============================================================
+     INICIO DEL AGENTE: el negocio de importar, de un vistazo
+     ============================================================ */
+  function renderAgente(el) {
+    var hoy = App.hoyISO();
+    var u = App.auth.user;
+    var imps = App.db.importaciones || [];
+    var activas = imps.filter(function (i) { return i.estado !== "cerrada"; });
+
+    var porCobrar = 0, porPagar = 0, ganancia = 0, atrasadas = 0;
+    activas.forEach(function (i) {
+      var sa = App.modImportaciones.saldos(i);
+      if (!sa) return;
+      porCobrar += Math.max(0, +sa.saldoCliente || 0);
+      porPagar += Math.max(0, +sa.saldoFabrica || 0);
+      ganancia += +sa.miComision || 0;
+    });
+
+    /* llegadas: lo que está en camino, ordenado por fecha estimada */
+    var llegadas = activas.filter(function (i) {
+      return i.fechas && i.fechas.eta && ["almacen", "embarcada", "transito", "llegada"].indexOf(i.estado) >= 0;
+    }).sort(function (a, b) { return a.fechas.eta < b.fechas.eta ? -1 : 1; });
+    llegadas.forEach(function (i) { if (C.diasHasta(i.fechas.eta) < 0 && i.estado !== "llegada") atrasadas++; });
+
+    var avisos = [];
+    var pendientes = 0;
+    if (App.modTareas) {
+      try {
+        avisos = App.modTareas.avisos() || [];
+        pendientes = App.modTareas.pendientes() || 0;
+      } catch (e) { avisos = []; }
+    }
+
+    var html = '<div class="view">';
+
+    /* saludo + acciones rápidas */
+    html += '<div class="spread" style="margin-bottom:14px;flex-wrap:wrap;gap:10px"><div>' +
+      '<div class="eyebrow">' + App.esc(App.fmt.fechaLarga(hoy)) + "</div>" +
+      '<h1 style="margin-top:2px">Hola, ' + App.esc(u.nombre.split(" ")[0]) + " ⚓</h1></div>" +
+      '<div class="flex" style="gap:8px">' +
+      '<button class="btn primary sm" data-nueva-imp>' + App.icon("plus") + " Importación</button>" +
+      '<button class="btn sm" data-nueva-cot>' + App.icon("comparar") + " Cotización</button></div></div>";
+
+    /* avisos transversales (festividades / respaldo) */
+    var alertas = "";
+    C.festEnAviso().slice(0, 2).forEach(function (f) {
+      var dias = C.diasHasta(f.fecha);
+      var cuando = dias === 0 ? "¡es hoy!" : (dias === 1 ? "¡es mañana!" : "en " + dias + " días");
+      alertas += '<div class="alert-item fest" data-ir="calendario"><span class="em">' + f.emoji + "</span><span><b>" +
+        App.esc(f.nombre) + "</b> " + cuando + "</span></div>";
+    });
+    if (App.auth.esSuper()) {
+      var dsr = C.diasSinRespaldo();
+      if (dsr === null || dsr > 7) {
+        alertas += '<div class="alert-item warn" data-respaldo><span class="em">💾</span><span><b>' +
+          (dsr === null ? "Nunca has descargado un respaldo" : "Llevas " + dsr + " días sin respaldar") +
+          "</b> - toca aquí y se descarga solo</span></div>";
+      }
+    }
+    if (alertas) html += '<div class="alert-strip">' + alertas + "</div>";
+
+    /* el dinero del negocio */
+    html += '<div class="grid-kpi">' +
+      '<div class="kpi" data-ir="importaciones" style="cursor:pointer"><div class="kpi-label">Importaciones en curso</div>' +
+      '<div class="kpi-value grad">' + activas.length + "</div>" +
+      '<div class="kpi-foot">' + (atrasadas ? '<span class="stat-delta down">▲ ' + atrasadas + " con retraso</span>" : "<span>todo en tiempo</span>") + "</div></div>" +
+      '<div class="kpi" data-ir="importaciones" style="cursor:pointer"><div class="kpi-label">Te falta cobrar</div>' +
+      '<div class="kpi-value num" style="color:var(--warn)">' + App.fmt.usd0(porCobrar) + "</div>" +
+      '<div class="kpi-foot">de tus clientes</div></div>' +
+      '<div class="kpi" data-ir="importaciones" style="cursor:pointer"><div class="kpi-label">Falta pagar</div>' +
+      '<div class="kpi-value num" style="color:var(--danger)">' + App.fmt.usd0(porPagar) + "</div>" +
+      '<div class="kpi-foot">a las fábricas</div></div>' +
+      '<div class="kpi" data-ir="importaciones" style="cursor:pointer"><div class="kpi-label">Tu ganancia</div>' +
+      '<div class="kpi-value num" style="color:var(--ok)">' + App.fmt.usd0(ganancia) + "</div>" +
+      '<div class="kpi-foot">comprometida en lo activo</div></div>' +
+      "</div>";
+
+    /* pipeline: dónde está parada cada importación */
+    html += '<div class="card" style="margin-bottom:14px"><div class="card-head"><h2>🧭 El camino de tus importaciones</h2>' +
+      '<a class="small" href="#/importaciones">Ver todas</a></div>';
+    if (!activas.length) {
+      html += '<div class="empty" style="padding:16px"><p>Todavía no hay importaciones en curso.</p>' +
+        '<button class="btn primary" data-nueva-imp style="margin-top:8px">' + App.icon("plus") + " Registrar la primera</button></div>";
+    } else {
+      html += '<div class="pipe">' + ETAPAS.map(function (et, ix) {
+        var n = activas.filter(function (i) { return et.ids.indexOf(i.estado) >= 0; }).length;
+        return (ix ? '<div class="pipe-flecha">' + App.icon("chevR") + "</div>" : "") +
+          '<div class="pipe-step' + (n ? " on" : "") + '" data-ir="importaciones" title="' + App.esc(et.l) + '">' +
+          '<div class="pipe-n">' + (n || "·") + '</div><div class="pipe-l">' + et.emoji + " " + et.l + "</div></div>";
+      }).join("") + "</div>";
+    }
+    html += "</div>";
+
+    /* dos columnas: qué atender + qué está llegando */
+    var cAtender = '<div class="card"><div class="card-head"><h2>📥 Por atender</h2>' +
+      (pendientes ? '<span class="pill tint">' + pendientes + "</span>" : "") + "</div>";
+    if (!avisos.length) {
+      cAtender += '<div class="empty" style="padding:14px"><p>✅ Todo al día. Los avisos de pagos, producción y llegadas aparecen aquí solos.</p></div>';
+    } else {
+      cAtender += avisos.slice(0, 4).map(function (a, i) {
+        var color = a.nivel === "alto" ? "danger" : a.nivel === "medio" ? "warn" : "info";
+        return '<div class="mini-row" data-aviso="' + i + '"><span class="pill ' + color + '" style="flex:none">●</span>' +
+          '<div class="mini-main"><div class="mini-title">' + App.esc(a.titulo) + '</div>' +
+          '<div class="mini-sub">' + App.esc(a.detalle || "") + "</div></div>" + App.icon("chevR") + "</div>";
+      }).join("");
+    }
+    cAtender += '<button class="btn ghost block" data-ir="tareas" style="margin-top:8px">' + App.icon("inbox") + " Abrir el inbox</button></div>";
+
+    var cLlegadas = '<div class="card"><div class="card-head"><h2>🚢 En camino</h2><span class="pill">' + llegadas.length + "</span></div>";
+    if (!llegadas.length) {
+      cLlegadas += '<div class="empty" style="padding:14px"><p>Nada navegando ahora mismo. Cuando una importación tenga fecha estimada de llegada, aquí verás la cuenta atrás.</p></div>';
+    } else {
+      cLlegadas += llegadas.slice(0, 5).map(function (i) {
+        var dl = C.diasHasta(i.fechas.eta);
+        var pill = i.estado === "llegada" ? '<span class="pill ok">ya llegó</span>'
+          : dl < 0 ? '<span class="pill danger">hace ' + (-dl) + " días</span>"
+            : dl === 0 ? '<span class="pill warn">llega HOY</span>'
+              : '<span class="pill info">' + dl + " día" + (dl === 1 ? "" : "s") + "</span>";
+        var fw = (App.db.forwarders || []).filter(function (f) { return f.id === i.forwarderId; })[0];
+        return '<div class="mini-row" data-imp="' + App.esc(i.id) + '">' +
+          '<div class="mini-main"><div class="mini-title">' + App.esc((i.codigo ? i.codigo + " · " : "") + i.titulo) + "</div>" +
+          '<div class="mini-sub">' + App.esc(fw ? fw.nombre : "") + (i.buque ? " · 🛳 " + App.esc(i.buque) : "") +
+          (i.bl ? " · BL " + App.esc(i.bl) : "") + "</div></div>" + pill + "</div>";
+      }).join("");
+    }
+    cLlegadas += "</div>";
+    html += '<div class="dash-cols"><div class="dash-col">' + cAtender + '</div><div class="dash-col">' + cLlegadas + "</div></div>";
+
+    /* la tienda, en resumen (si vende) */
+    if (App.auth.puede("ventas")) {
+      var mesAct = App.mesRango(0), mesAnt = App.mesRango(-1);
+      var vHoy = C.ventasEntre(hoy, hoy), vMes = C.ventasEntre(mesAct[0], mesAct[1]);
+      var totalHoy = C.sum(vHoy), totalMes = C.sum(vMes), totalMesAnt = C.sum(C.ventasEntre(mesAnt[0], mesAnt[1]));
+      var pendEnvio = C.pendientesEnvio();
+      var stockBajo = C.stockBajo();
+      var spark7 = C.serieDiaria(7).map(function (d) { return d.total; });
+      var delta = C.deltaPct(totalMes, totalMesAnt);
+      html += '<div class="card section-gap"><div class="card-head"><h2>🛍️ Tus tiendas</h2>' +
+        '<a class="small" href="#/ventas">Ir a ventas</a></div>' +
+        '<div class="grid-kpi" style="margin-bottom:0">' +
+        '<div class="kpi"><div class="kpi-label">Hoy</div><div class="kpi-value">' + App.fmt.usd0(totalHoy) + "</div>" +
+        '<div class="kpi-foot">' + vHoy.length + " venta" + (vHoy.length === 1 ? "" : "s") + '</div><div class="kpi-spark">' + App.chart.spark(spark7, "var(--c3)") + "</div></div>" +
+        '<div class="kpi"><div class="kpi-label">Este mes</div><div class="kpi-value">' + App.fmt.usd0(totalMes) + "</div>" +
+        '<div class="kpi-foot">' + App.deltaPill(delta) + "<span>vs mes pasado</span></div></div>" +
+        '<div class="kpi" data-ir="envios" style="cursor:pointer"><div class="kpi-label">Por enviar</div><div class="kpi-value">' + pendEnvio.length + "</div>" +
+        '<div class="kpi-foot">pedidos pendientes</div></div>' +
+        '<div class="kpi" data-ir="inventario" style="cursor:pointer"><div class="kpi-label">Stock bajo</div><div class="kpi-value"' + (stockBajo.length ? ' style="color:var(--warn)"' : "") + ">" + stockBajo.length + "</div>" +
+        '<div class="kpi-foot">producto' + (stockBajo.length === 1 ? "" : "s") + " por reponer</div></div>" +
+        "</div></div>";
+    }
+
+    html += "</div>";
+    el.innerHTML = html;
+
+    /* navegación */
+    App.$$("[data-ir]", el).forEach(function (x) {
+      x.addEventListener("click", function () { location.hash = "#/" + x.dataset.ir; });
+    });
+    App.$$("[data-nueva-imp]", el).forEach(function (b) {
+      b.addEventListener("click", function () {
+        if (App.modImportaciones.nueva) { location.hash = "#/importaciones"; App.modImportaciones.nueva(); }
+      });
+    });
+    App.$$("[data-nueva-cot]", el).forEach(function (b) {
+      b.addEventListener("click", function () {
+        if (App.modCotizaciones && App.modCotizaciones.nueva) { location.hash = "#/cotizaciones"; App.modCotizaciones.nueva(); }
+      });
+    });
+    App.$$("[data-aviso]", el).forEach(function (x) {
+      x.addEventListener("click", function () {
+        var a = avisos[+x.dataset.aviso];
+        if (a && a.ir) location.hash = a.ir;
+      });
+    });
+    App.$$("[data-imp]", el).forEach(function (x) {
+      x.addEventListener("click", function () {
+        var i = imps.filter(function (q) { return q.id === x.dataset.imp; })[0];
+        if (i && App.modImportaciones.ficha) App.modImportaciones.ficha(i);
+      });
+    });
+    var bResp = App.$("[data-respaldo]", el);
+    if (bResp) bResp.addEventListener("click", function () {
+      App.descargarRespaldo();
+      App.toast("Respaldo descargado 💾 - guárdalo en un lugar seguro");
+      App.render();
+    });
+  }
+
+  /* ============================================================
+     INICIO CLÁSICO DE TIENDA (vendedor / socio)
+     ============================================================ */
+  function renderTienda(el) {
       var hoy = App.hoyISO();
       var mesAct = App.mesRango(0), mesAnt = App.mesRango(-1);
       var vHoy = C.ventasEntre(hoy, hoy);
@@ -73,9 +246,6 @@ window.App = window.App || {};
       html += '<div class="spread" style="margin-bottom:12px"><div>' +
         '<div class="eyebrow">' + App.esc(App.fmt.fechaLarga(hoy)) + "</div>" +
         '<h1 style="margin-top:2px">Hola, ' + App.esc(u.nombre.split(" ")[0]) + " 👋</h1></div></div>";
-
-      /* resumen del negocio de agente de compras (solo quien tiene acceso) */
-      html += tarjetaImportaciones();
 
       /* alertas (avisos): festividades + stock bajo */
       var alertas = "";
@@ -252,11 +422,12 @@ window.App = window.App || {};
       var cardTop = '<div class="card"><div class="card-head"><h2>🏆 Top productos</h2><span class="pill">este mes</span></div>';
       if (!top.length) cardTop += '<div class="empty"><p>Aún no hay ventas este mes</p></div>';
       else {
-        cardTop += App.hbars(top.map(function (t, i) {
+        cardTop += App.hbars(top.map(function (t) {
           var p = App.prod(t.productoId);
-          return { label: (p ? p.emoji + " " : "") + t.nombre, valor: t.usd, color: p && p.tienda === "evz" ? "var(--c2)" : "var(--c1)" };
+          var ixT = (App.db.settings.tiendas || []).map(function (x) { return x.id; }).indexOf(p ? p.tienda : "");
+          return { label: (p ? p.emoji + " " : "") + t.nombre, valor: t.usd, color: "var(--c" + ((Math.max(ixT, 0) % 5) + 1) + ")" };
         }));
-        cardTop += '<div class="chart-note">Barra = ingresos del mes. Rosa = La Teacher, azul = En Vzla.</div>';
+        cardTop += '<div class="chart-note">Barra = ingresos del mes, con el color de su tienda.</div>';
       }
       cardTop += "</div>";
       colDer += cardTop;
@@ -327,9 +498,9 @@ window.App = window.App || {};
           sheetVentasLista("🏬 " + d.label + " - este mes", lista);
         }
       });
-      App.$("#lg-tienda").innerHTML =
-        '<span class="legend-item"><span class="legend-dot" style="background:var(--c1)"></span>Los Juguetes de la Teacher</span>' +
-        '<span class="legend-item"><span class="legend-dot" style="background:var(--c2)"></span>En Vzla Te Lo Consigo</span>';
+      App.$("#lg-tienda").innerHTML = (App.db.settings.tiendas || []).map(function (t, i) {
+        return '<span class="legend-item"><span class="legend-dot" style="background:var(--c' + ((i % 5) + 1) + ')"></span>' + App.esc(t.nombre) + "</span>";
+      }).join("");
 
       /* navegación de tarjetas */
       App.$$("[data-ir]", el).forEach(function (x) {
@@ -361,8 +532,7 @@ window.App = window.App || {};
           if (v) App.abrirVenta(v);
         });
       });
-    }
-  };
+  }
 
   /* lista de ventas en sheet (drill-down de las gráficas) */
   function sheetVentasLista(titulo, lista) {

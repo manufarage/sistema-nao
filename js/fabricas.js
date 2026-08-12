@@ -632,7 +632,7 @@ window.App = window.App || {};
         '<div class="field"><label>Flete total del embarque (USD)</label><input class="input num" id="fc2-flete" type="number" step="0.01" min="0" value="' + (FC.fleteTotal || 0) + '"></div>' +
         '<div class="field full"><label>Notas</label><input class="input" id="fc2-notas" value="' + App.esc(FC.notas || "") + '"></div>' +
         "</div>" +
-        '<h3 style="margin-top:10px">🧸 Productos del pedido</h3>' +
+        '<h3 style="margin-top:10px">📦 Productos del pedido</h3>' +
         '<div class="flex" style="margin-top:6px;gap:8px"><div class="search-bar" style="flex:1">' + App.icon("buscar") +
         '<input class="input" id="fc2-bus" placeholder="Busca o escanea (pistola + Enter)…"></div>' +
         '<button class="btn icon" id="fc2-scan" title="Escanear con cámara" style="width:42px;height:42px;flex:none">' + App.icon("camara") + "</button></div>" +

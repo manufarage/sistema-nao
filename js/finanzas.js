@@ -73,10 +73,9 @@ window.App = window.App || {};
     html += '<div class="grid-2 section-gap">' +
       '<div class="card"><div class="card-head"><h2>📈 Ingresos - Últimos 6 meses</h2></div><div class="chart-box" id="fin-ch-meses"></div></div>' +
       '<div class="card"><div class="card-head"><h2>🏬 Por tienda</h2><span class="pill">' + (mesOffset === 0 ? "este mes" : "mes pasado") + "</span></div>" +
-      App.hbars([
-        { label: "🧸 La Teacher", valor: Math.round(porTienda.ljt || 0), color: "var(--c1)" },
-        { label: "🛍️ En Vzla", valor: Math.round(porTienda.evz || 0), color: "var(--c2)" }
-      ]) + "</div></div>";
+      App.hbars((App.db.settings.tiendas || []).map(function (t, i) {
+        return { label: (t.emoji ? t.emoji + " " : "") + (t.corto || t.nombre), valor: Math.round(porTienda[t.id] || 0), color: "var(--c" + ((i % 5) + 1) + ")" };
+      })) + "</div></div>";
 
     var porCanal = C.porCanal(lista);
     var CANALES = [["Instagram", "var(--c1)"], ["Tienda física", "var(--c2)"], ["WhatsApp", "var(--c3)"], ["Referido", "var(--c4)"]];

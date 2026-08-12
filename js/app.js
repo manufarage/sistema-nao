@@ -14,13 +14,21 @@ window.App = window.App || {};
     return rol === "super" ? "Súper usuario" : rol === "socio" ? "Socio" : "Vendedor";
   };
 
-  /* Orden del menú: primero el trabajo de agente de compras (el negocio
-     principal), después la tienda propia, y al final lo transversal.
+  /* El menú sigue el flujo real del negocio (orden de Manuel, 11-ago):
+     primero COMPRAR EN CHINA en el orden del proceso (buscar fábricas →
+     cotizar → agente de carga → la importación en camino), y cuando la
+     mercancía ya está aquí, MIS TIENDAS (vender). Al final lo transversal.
      Un módulo que no esté cargado simplemente no aparece. */
+  var GRUPOS = [
+    { titulo: null, ids: ["dashboard", "tareas"] },
+    { titulo: "Comprar en China", ids: ["fabricas", "cotizaciones", "carga", "importaciones"] },
+    { titulo: "Mis tiendas", ids: ["ventas", "envios", "inventario", "clientes", "promos", "finanzas"] },
+    { titulo: null, ids: ["calendario", "ajustes"] }
+  ];
   function modulos() {
     if (!MODS.length) {
       MODS = [App.modDashboard, App.modTareas, App.modFabricas, App.modCotizaciones,
-        App.modImportaciones, App.modCarga, App.modVentas, App.modEnvios, App.modInventario,
+        App.modCarga, App.modImportaciones, App.modVentas, App.modEnvios, App.modInventario,
         App.modClientes, App.modPromos, App.modFinanzas, App.modCalendario, App.modAjustes]
         .filter(function (m) { return !!m; });
     }
@@ -62,9 +70,20 @@ window.App = window.App || {};
       '<button class="rate-pill" id="side-tasa" title="Tasa de cobro del día"><span class="flag">💱</span> €1 = <b>' +
       App.fmt.num(App.db.settings.tasas.eur) + " Bs</b></button>" +
       (App.MODO_NUBE ? '<div class="small muted" data-sync-estado style="padding:0 8px">' + etiquetaSync() + "</div>" : "") +
-      '<nav class="side-nav">' + vis.map(function (m) {
-        return '<a class="side-item" data-nav="' + m.id + '" href="#/' + m.id + '">' + App.icon(m.icono) + "<span>" + m.titulo + "</span></a>";
-      }).join("") + "</nav>" +
+      '<nav class="side-nav">' + (function () {
+        var html = "", primero = true;
+        GRUPOS.forEach(function (g) {
+          var items = g.ids.map(modulo).filter(function (m) { return m && vis.indexOf(m) >= 0; });
+          if (!items.length) return;
+          if (g.titulo) html += '<div class="side-label">' + g.titulo + "</div>";
+          else if (!primero) html += '<div class="side-sep"></div>';
+          html += items.map(function (m) {
+            return '<a class="side-item" data-nav="' + m.id + '" href="#/' + m.id + '">' + App.icon(m.icono) + "<span>" + m.titulo + "</span></a>";
+          }).join("");
+          primero = false;
+        });
+        return html;
+      })() + "</nav>" +
       '<div class="side-user"><div class="avatar">' + (u.emoji || App.iniciales(u.nombre)) + "</div>" +
       '<div style="flex:1;min-width:0"><div class="side-user-name">' + App.esc(u.nombre) + "</div>" +
       '<div class="side-user-rol">' + App.etiquetaRol(u.rol) + "</div></div>" +
@@ -163,10 +182,19 @@ window.App = window.App || {};
       App.etiquetaRol(u.rol) + "</div></div>" +
       '<button class="rate-pill" data-mas-tasa>💱 €1 = <b>' + App.fmt.num(App.db.settings.tasas.eur) + " Bs</b></button></div>" +
       (App.MODO_NUBE ? '<div class="small muted" data-sync-estado style="padding:2px 4px 6px">' + etiquetaSync() + "</div>" : "") +
-      '<div class="list">' + resto.map(function (m) {
-        return '<a class="row-item" data-mas-ir="' + m.id + '" href="#/' + m.id + '"><div class="thumb">' + App.icon(m.icono) + "</div>" +
-          '<div class="row-main"><div class="row-title">' + m.titulo + "</div></div>" + App.icon("chevR") + "</a>";
-      }).join("") + "</div>" +
+      (function () {
+        var html = "";
+        GRUPOS.forEach(function (g) {
+          var items = g.ids.map(modulo).filter(function (m) { return m && resto.indexOf(m) >= 0; });
+          if (!items.length) return;
+          if (g.titulo) html += '<div class="side-label" style="padding:10px 4px 4px">' + g.titulo + "</div>";
+          html += '<div class="list">' + items.map(function (m) {
+            return '<a class="row-item" data-mas-ir="' + m.id + '" href="#/' + m.id + '"><div class="thumb">' + App.icon(m.icono) + "</div>" +
+              '<div class="row-main"><div class="row-title">' + m.titulo + "</div></div>" + App.icon("chevR") + "</a>";
+          }).join("") + "</div>";
+        });
+        return html;
+      })() +
       (App.MODO_NUBE ? '<button class="btn block" data-mas-escaner style="margin-top:6px">📷 Escáner remoto - usar este celular como pistola de la compu</button>' : "") +
       '<div class="flex" style="gap:8px;margin-top:6px">' +
       '<button class="btn" data-mas-tema style="flex:1">' + App.icon(esOscuro ? "sol" : "luna") + " Tema " + (esOscuro ? "claro" : "oscuro") + "</button>" +

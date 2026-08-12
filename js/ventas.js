@@ -612,7 +612,7 @@ window.App = window.App || {};
       var box = App.$("#nv-items", s.el);
       /* candado de precios: si está activo, solo el súper puede modificar precios al vender */
       var puedeEditarPrecio = App.auth.esSuper() || App.db.settings.bloquearPrecioVendedor === false;
-      var html = "<h3>🧸 Productos</h3>";
+      var html = "<h3>📦 Productos</h3>";
 
       var promosActivas = App.db.promos.filter(function (p) { return C().promoEstado(p) === "activa"; });
       if (promosActivas.length) {

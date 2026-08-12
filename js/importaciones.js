@@ -471,6 +471,11 @@ window.App = window.App || {};
       pillDestino(imp) + "</div></div>";
 
     if (atr) h += '<div class="small" style="margin-top:8px"><span class="pill danger">⏰ ' + App.esc(atr) + "</span></div>";
+    else if (imp.fechas && imp.fechas.eta && k >= ix("almacen") && k < ix("llegada")) {
+      var dEta = App.calc.diasHasta(imp.fechas.eta);
+      if (dEta >= 0) h += '<div class="small" style="margin-top:8px"><span class="pill info">🌊 ' +
+        (dEta === 0 ? "llega HOY" : "llega en " + dEta + " día" + (dEta === 1 ? "" : "s") + " (" + App.fmt.fecha(imp.fechas.eta) + ")") + "</span></div>";
+    }
 
     h += barraEstados(k);
     h += '<div class="small muted" style="margin-top:5px">Paso ' + (k + 1) + " de " + ESTADOS.length + " · " + E.emoji + " " + App.esc(E.label) + "</div>";
@@ -760,15 +765,35 @@ window.App = window.App || {};
       }
       h += "</div>";
 
+      /* cuenta atrás de llegada, si hay fecha estimada */
+      if (imp.fechas && imp.fechas.eta && ["entregada", "cerrada"].indexOf(imp.estado) < 0) {
+        var dLleg = App.calc.diasHasta(imp.fechas.eta);
+        h += '<div class="small" style="margin-top:10px">🌊 Llegada estimada: <b>' + App.fmt.fecha(imp.fechas.eta) + "</b> " +
+          (imp.estado === "llegada" ? '<span class="pill ok">ya llegó</span>'
+            : dLleg < 0 ? '<span class="pill danger">venció hace ' + (-dLleg) + " día" + (dLleg === -1 ? "" : "s") + "</span>"
+              : dLleg === 0 ? '<span class="pill warn">llega HOY</span>'
+                : '<span class="pill info">faltan ' + dLleg + " día" + (dLleg === 1 ? "" : "s") + "</span>") +
+          "</div>";
+      }
+
       h += '<div class="form-grid" style="margin-top:12px">' +
         '<div class="field full"><label>Shipping mark</label><div class="flex" style="gap:8px">' +
         '<input class="input" data-emb="shippingMark" value="' + App.esc(imp.shippingMark || "") + '" placeholder="La marca que va en las cajas" style="flex:1">' +
         '<button class="btn icon" data-copiar-mark title="Copiar">' + App.icon("copiar") + "</button></div></div>" +
-        '<div class="field"><label>Guía / BL</label><input class="input" data-emb="guia" value="' + App.esc(imp.guia || "") + '"></div>' +
+        '<div class="field"><label>BL (conocimiento de embarque)</label><div class="flex" style="gap:8px">' +
+        '<input class="input" data-emb="bl" value="' + App.esc(imp.bl || "") + '" placeholder="N° del BL" style="flex:1">' +
+        '<button class="btn icon" data-copiar-bl title="Copiar BL">' + App.icon("copiar") + "</button></div></div>" +
+        '<div class="field"><label>Guía aérea / courier</label><input class="input" data-emb="guia" value="' + App.esc(imp.guia || "") + '"></div>' +
         '<div class="field"><label>Contenedor</label><input class="input" data-emb="contenedor" value="' + App.esc(imp.contenedor || "") + '"></div>' +
+        '<div class="field"><label>Buque</label><input class="input" data-emb="buque" value="' + App.esc(imp.buque || "") + '" placeholder="Nombre del barco"></div>' +
+        '<div class="field full"><label>Código de rastreo del agente</label><div class="flex" style="gap:8px">' +
+        '<input class="input" data-emb="trackingAgente" value="' + App.esc(imp.trackingAgente || "") + '" placeholder="Código o enlace del sistema de tu agente" style="flex:1">' +
+        '<button class="btn icon" data-track-agente title="Abrir o copiar">' + App.icon("chevR") + "</button></div></div>" +
         '<div class="field"><label>Peso (kg)</label><input class="input num" data-emb-num="pesoKg" type="number" step="0.01" min="0" value="' + num(imp.pesoKg) + '"></div>' +
         '<div class="field"><label>Volumen (CBM)</label><input class="input num" data-emb-num="cbm" type="number" step="0.001" min="0" value="' + num(imp.cbm) + '"></div>' +
-        "</div>";
+        "</div>" +
+        '<button class="btn sm ghost" data-marinetraffic style="margin-top:6px">🛳 Buscar el buque en MarineTraffic</button>' +
+        '<div class="small muted" style="margin-top:4px">El rastreo automático del barco no es gratis; por ahora el botón busca el buque en la web de MarineTraffic y la fecha estimada se lleva a mano en la línea de tiempo.</div>';
       box.innerHTML = h;
 
       App.$$("[data-emb]", box).forEach(function (inp) {
@@ -787,6 +812,23 @@ window.App = window.App || {};
       if (bm) bm.addEventListener("click", function () {
         if (!imp.shippingMark) { App.toast("Todavía no hay shipping mark", "err"); return; }
         App.copiar(imp.shippingMark, "Shipping mark copiado");
+      });
+      var bbl = App.$("[data-copiar-bl]", box);
+      if (bbl) bbl.addEventListener("click", function () {
+        if (!imp.bl) { App.toast("Todavía no hay BL cargado", "err"); return; }
+        App.copiar(imp.bl, "BL copiado");
+      });
+      var bmt = App.$("[data-marinetraffic]", box);
+      if (bmt) bmt.addEventListener("click", function () {
+        if (!imp.buque) { App.toast("Escribe primero el nombre del buque", "err"); return; }
+        window.open("https://www.marinetraffic.com/es/ais/index/search/all?keyword=" + encodeURIComponent(imp.buque), "_blank", "noopener");
+      });
+      var bta = App.$("[data-track-agente]", box);
+      if (bta) bta.addEventListener("click", function () {
+        var t = (imp.trackingAgente || "").trim();
+        if (!t) { App.toast("Todavía no hay código de rastreo", "err"); return; }
+        if (/^https?:\/\//i.test(t)) window.open(t, "_blank", "noopener");
+        else App.copiar(t, "Código copiado - pégalo en el sistema de tu agente");
       });
       var bw = App.$("[data-copiar-wc]", box);
       if (bw) bw.addEventListener("click", function () { App.copiar(bw.dataset.copiarWc, "WeChat copiado"); });
@@ -1115,7 +1157,7 @@ window.App = window.App || {};
       items: [], valorFactura: 0, pagosFabrica: [],
       comisionTipo: "pct", comisionValor: 10,
       fleteEstimado: 0, fleteReal: 0, otrosCostos: [], pagosCliente: [],
-      estado: "cotizada", fechas: {}, shippingMark: "", guia: "", contenedor: "",
+      estado: "cotizada", fechas: {}, shippingMark: "", bl: "", buque: "", trackingAgente: "", guia: "", contenedor: "",
       pesoKg: 0, cbm: 0, documentos: [], notas: "", creadoEl: App.hoyISO()
     };
     if (pre) {

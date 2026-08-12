@@ -393,7 +393,7 @@ window.App = window.App || {};
   /* ---------- formulario nuevo / editar ---------- */
   function formProducto(orig) {
     var FP = orig ? JSON.parse(JSON.stringify(orig)) : {
-      id: null, sku: "", codigoBarras: "", nombre: "", emoji: "🧸", tienda: "ljt", categoria: App.db.settings.categorias[0],
+      id: null, sku: "", codigoBarras: "", nombre: "", emoji: "📦", tienda: (App.db.settings.tiendas && App.db.settings.tiendas[0] ? App.db.settings.tiendas[0].id : "t1"), categoria: App.db.settings.categorias[0],
       genero: "unisex", descripcion: "", tallas: null, tipoVariante: "talla", stock: 0, stockMin: 2,
       costoChina: 0, flete: 0, costoAds: 0, presupuestoAds: 0, precio: 0, fotos: []
     };
