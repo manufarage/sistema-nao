@@ -447,8 +447,47 @@ window.App = window.App || {};
     ESTADOS: ESTADOS,
     saldos: saldos,
     nuevaDesdeCotizacion: nuevaDesdeCotizacion,
-    ficha: ficha
+    ficha: ficha,
+    travesia: travesia
   };
+
+  /* ---------- travesía: el barco avanzando hacia el destino ----------
+     El avance sale de las fechas reales: zarpe (fechas.embarque) → llegada
+     estimada (fechas.eta). Sin fecha de zarpe, el barco se pinta saliendo. */
+  function travesia(imp, mini) {
+    var f = imp.fechas || {};
+    if (!f.eta) return "";
+    var llego = ix(imp.estado) >= ix("llegada");
+    var pct;
+    if (llego) pct = 1;
+    else {
+      var hoyMs = App.fromISO(App.hoyISO()).getTime();
+      var etaMs = App.fromISO(f.eta).getTime();
+      var iniMs = f.embarque ? App.fromISO(f.embarque).getTime() : null;
+      if (iniMs !== null && etaMs > iniMs) pct = Math.max(0.04, Math.min(0.96, (hoyMs - iniMs) / (etaMs - iniMs)));
+      else pct = 0.08;
+    }
+    /* bandera de destino según la ruta del agente (Venezuela por defecto) */
+    var fwd = porId("forwarders", imp.forwarderId);
+    var rutaTxt = fwd && fwd.rutas && fwd.rutas.length ? fwd.rutas.join(" ") : "";
+    var bandera = /Estados Unidos|USA|EE\.?UU/i.test(rutaTxt) ? "🇺🇸" : /Panam/i.test(rutaTxt) ? "🇵🇦" : "🇻🇪";
+    var dl = App.calc.diasHasta(f.eta);
+    var pie = llego ? "ya llegó"
+      : dl < 0 ? "debió llegar hace " + (-dl) + " día" + (dl === -1 ? "" : "s")
+        : dl === 0 ? "llega HOY"
+          : "llega en " + dl + " día" + (dl === 1 ? "" : "s");
+    var p = pct.toFixed(3);
+    return '<div class="travesia' + (mini ? " mini" : "") + '">' +
+      '<div class="tv-linea">' +
+      '<span class="tv-origen">🇨🇳</span>' +
+      '<div class="tv-hecho" style="width:calc((100% - ' + (mini ? 44 : 56) + 'px) * ' + p + ')"></div>' +
+      '<span class="tv-barco" style="left:calc(' + (mini ? 22 : 28) + 'px + (100% - ' + (mini ? 44 : 56) + 'px) * ' + p + ')">' + (llego ? "⚓" : "🚢") + "</span>" +
+      '<span class="tv-destino">' + bandera + "</span>" +
+      "</div>" +
+      '<div class="tv-pies"><span>' + (f.embarque ? "zarpó el " + App.fmt.fecha(f.embarque) : "embarcada") + "</span>" +
+      "<span>" + App.esc(pie) + " · " + App.fmt.fecha(f.eta) + "</span></div>" +
+      "</div>";
+  }
 
   /* ---------- la tarjeta de cada importación ---------- */
   function tarjeta(imp) {
@@ -471,10 +510,14 @@ window.App = window.App || {};
       pillDestino(imp) + "</div></div>";
 
     if (atr) h += '<div class="small" style="margin-top:8px"><span class="pill danger">⏰ ' + App.esc(atr) + "</span></div>";
-    else if (imp.fechas && imp.fechas.eta && k >= ix("almacen") && k < ix("llegada")) {
+
+    /* navegando: se ve el barco avanzar; antes de zarpar, solo la fecha */
+    if (k >= ix("embarcada") && k <= ix("llegada")) {
+      h += travesia(imp, false);
+    } else if (imp.fechas && imp.fechas.eta && k === ix("almacen") && !atr) {
       var dEta = App.calc.diasHasta(imp.fechas.eta);
       if (dEta >= 0) h += '<div class="small" style="margin-top:8px"><span class="pill info">🌊 ' +
-        (dEta === 0 ? "llega HOY" : "llega en " + dEta + " día" + (dEta === 1 ? "" : "s") + " (" + App.fmt.fecha(imp.fechas.eta) + ")") + "</span></div>";
+        (dEta === 0 ? "llega HOY" : "llegada estimada en " + dEta + " día" + (dEta === 1 ? "" : "s") + " (" + App.fmt.fecha(imp.fechas.eta) + ")") + "</span></div>";
     }
 
     h += barraEstados(k);
@@ -765,14 +808,15 @@ window.App = window.App || {};
       }
       h += "</div>";
 
-      /* cuenta atrás de llegada, si hay fecha estimada */
-      if (imp.fechas && imp.fechas.eta && ["entregada", "cerrada"].indexOf(imp.estado) < 0) {
+      /* la travesía (o la cuenta atrás, si todavía no zarpó) */
+      if (ix(imp.estado) >= ix("embarcada") && ix(imp.estado) <= ix("llegada")) {
+        h += travesia(imp, false);
+      } else if (imp.fechas && imp.fechas.eta && ["entregada", "cerrada"].indexOf(imp.estado) < 0) {
         var dLleg = App.calc.diasHasta(imp.fechas.eta);
         h += '<div class="small" style="margin-top:10px">🌊 Llegada estimada: <b>' + App.fmt.fecha(imp.fechas.eta) + "</b> " +
-          (imp.estado === "llegada" ? '<span class="pill ok">ya llegó</span>'
-            : dLleg < 0 ? '<span class="pill danger">venció hace ' + (-dLleg) + " día" + (dLleg === -1 ? "" : "s") + "</span>"
-              : dLleg === 0 ? '<span class="pill warn">llega HOY</span>'
-                : '<span class="pill info">faltan ' + dLleg + " día" + (dLleg === 1 ? "" : "s") + "</span>") +
+          (dLleg < 0 ? '<span class="pill danger">venció hace ' + (-dLleg) + " día" + (dLleg === -1 ? "" : "s") + "</span>"
+            : dLleg === 0 ? '<span class="pill warn">llega HOY</span>'
+              : '<span class="pill info">faltan ' + dLleg + " día" + (dLleg === 1 ? "" : "s") + "</span>") +
           "</div>";
       }
 
@@ -1285,6 +1329,11 @@ window.App = window.App || {};
         F.id = App.uid("imp");
         F.creadoEl = F.creadoEl || App.hoyISO();
         App.db.importaciones.push(F);
+        /* si nació de una búsqueda, esa búsqueda queda como comprada */
+        if (F.cotizacionId) {
+          var cotOrigen = (App.db.cotizaciones || []).filter(function (c) { return c.id === F.cotizacionId; })[0];
+          if (cotOrigen && cotOrigen.estado !== "comprada") cotOrigen.estado = "comprada";
+        }
       }
       App.save();
       App.toast(orig ? "Importación actualizada" : "Importación creada 🚢");
@@ -1303,6 +1352,8 @@ window.App = window.App || {};
     formImportacion(null, {
       titulo: c.titulo || desc,
       notas: c.descripcion || "",
+      destino: c.tienda ? "tienda" : "cliente",
+      tienda: c.tienda || null,
       clienteId: c.clienteId || null,
       proveedorId: o.proveedorId || null,
       forwarderId: c.forwarderId || null,

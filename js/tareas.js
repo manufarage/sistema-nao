@@ -183,13 +183,13 @@ window.App = window.App || {};
 
       /* 6. cotización dormida */
       (App.db.cotizaciones || []).forEach(function (c) {
-        if (c.estado !== "abierta" || !c.fecha) return;
+        if (["abierta", "busqueda", "seleccion", "muestras"].indexOf(c.estado) < 0 || !c.fecha) return;
         var dias2 = -App.calc.diasHasta(c.fecha);
         if (dias2 > 7) {
           out.push({
             nivel: "bajo",
             titulo: "Cotización dormida",
-            detalle: "La cotización " + (c.titulo || "sin título") + " lleva " + dias2 + " días abierta sin decidir.",
+            detalle: "La cotización " + (c.titulo || "sin título") + " lleva " + dias2 + " días en proceso sin decidir.",
             ir: "#/cotizaciones"
           });
         }

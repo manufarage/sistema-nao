@@ -9,14 +9,53 @@ window.App = window.App || {};
 (function () {
   "use strict";
 
+  /* El proceso natural de una búsqueda, como lo trabaja Manuel:
+     buscar 2-5 fábricas → elegir el producto → muestras (con su costo y su
+     envío) → decidir la fábrica → primera compra. "abierta" es el nombre
+     viejo de la primera fase y se sigue aceptando. */
   var ESTADOS = {
-    abierta: { label: "Abierta", pill: "warn", emoji: "🕑" },
-    decidida: { label: "Decidida", pill: "ok", emoji: "✅" },
-    descartada: { label: "Descartada", pill: "info", emoji: "🗄️" }
+    busqueda: { label: "Buscando fábricas", pill: "warn", emoji: "🔍" },
+    seleccion: { label: "Producto elegido", pill: "warn", emoji: "🧲" },
+    muestras: { label: "Con muestras", pill: "info", emoji: "🧪" },
+    decidida: { label: "Fábrica elegida", pill: "ok", emoji: "✅" },
+    comprada: { label: "Comprada", pill: "tint", emoji: "🛒" },
+    descartada: { label: "Descartada", pill: "info", emoji: "🗄️" },
+    abierta: { label: "Buscando fábricas", pill: "warn", emoji: "🔍" }
   };
+  var FASES = [
+    { id: "busqueda", corto: "Búsqueda", emoji: "🔍" },
+    { id: "seleccion", corto: "Producto", emoji: "🧲" },
+    { id: "muestras", corto: "Muestras", emoji: "🧪" },
+    { id: "decidida", corto: "Elegida", emoji: "✅" },
+    { id: "comprada", corto: "Comprada", emoji: "🛒" }
+  ];
+  function faseDe(cot) {
+    var e = cot.estado === "abierta" ? "busqueda" : cot.estado;
+    return ESTADOS[e] ? e : "busqueda";
+  }
+  function faseIx(cot) {
+    var f = faseDe(cot);
+    for (var i = 0; i < FASES.length; i++) if (FASES[i].id === f) return i;
+    return -1; /* descartada */
+  }
+  function enProceso(cot) {
+    return ["busqueda", "seleccion", "muestras"].indexOf(faseDe(cot)) >= 0;
+  }
+  /* lo invertido en muestras: el costo de la muestra + su envío, de las pedidas */
+  function gastoMuestras(cot) {
+    return (cot.ofertas || []).reduce(function (t, o) {
+      return t + (o.muestraPedida ? n(o.precioMuestra) + n(o.muestraEnvio) : 0);
+    }, 0);
+  }
+
+  /* a qué fase se vuelve cuando se deshace una elección */
+  function faseRetro(cot) {
+    var conMuestra = (cot.ofertas || []).some(function (o) { return o.muestraPedida; });
+    return conMuestra ? "muestras" : ((cot.ofertas || []).length ? "seleccion" : "busqueda");
+  }
 
   /* el filtro vive fuera del render para que no se pierda al repintar */
-  var filtro = { estado: "abierta", texto: "" };
+  var filtro = { estado: "proceso", texto: "" };
 
   /* ---------- utilidades ---------- */
   function n(v) { return +v || 0; }
@@ -274,23 +313,25 @@ window.App = window.App || {};
         return (a.fecha || "") < (b.fecha || "") ? 1 : -1;
       });
 
-      var cuenta = { abierta: 0, decidida: 0, descartada: 0 };
+      var cuenta = { proceso: 0, decidida: 0, comprada: 0, descartada: 0 };
       lista.forEach(function (c) {
-        var e = ESTADOS[c.estado] ? c.estado : "abierta";
-        cuenta[e]++;
+        var f = faseDe(c);
+        if (enProceso(c)) cuenta.proceso++;
+        else if (cuenta[f] !== undefined) cuenta[f]++;
       });
 
       var html = '<div class="view">' +
         '<div class="spread" style="margin-bottom:12px"><div><h1>⚖️ Cotizaciones</h1>' +
-        '<div class="small muted">El mismo producto en varias fábricas, con el flete sumado</div></div>' +
+        '<div class="small muted">De buscar fábricas a la primera compra: compara con el flete sumado</div></div>' +
         '<button class="btn primary" id="btn-cz-nueva">' + App.icon("plus") + " Cotización</button></div>";
 
       html += '<div class="search-bar" style="margin-bottom:10px">' + App.icon("buscar") +
         '<input class="input" id="bus-cz" placeholder="Buscar por título o cliente…" value="' + App.esc(filtro.texto) + '"></div>';
 
       html += '<div class="chips scroll-x" style="margin-bottom:12px">' +
-        [["abierta", "Abiertas", cuenta.abierta], ["decidida", "Decididas", cuenta.decidida],
-        ["descartada", "Descartadas", cuenta.descartada], ["todas", "Todas", lista.length]]
+        [["proceso", "En proceso", cuenta.proceso], ["decidida", "Elegidas", cuenta.decidida],
+        ["comprada", "Compradas", cuenta.comprada], ["descartada", "Descartadas", cuenta.descartada],
+        ["todas", "Todas", lista.length]]
           .map(function (x) {
             return '<button class="chip' + (filtro.estado === x[0] ? " active" : "") + '" data-cz-filtro="' +
               App.esc(x[0]) + '">' + x[1] + " (" + x[2] + ")</button>";
@@ -302,8 +343,8 @@ window.App = window.App || {};
       function pintarLista() {
         var vis = lista.filter(function (c) {
           if (filtro.estado !== "todas") {
-            var e = ESTADOS[c.estado] ? c.estado : "abierta";
-            if (e !== filtro.estado) return false;
+            if (filtro.estado === "proceso") { if (!enProceso(c)) return false; }
+            else if (faseDe(c) !== filtro.estado) return false;
           }
           if (!filtro.texto) return true;
           var t = filtro.texto.toLowerCase();
@@ -323,7 +364,7 @@ window.App = window.App || {};
         }
 
         vis.forEach(function (cot) {
-          var est = ESTADOS[cot.estado] || ESTADOS.abierta;
+          var est = ESTADOS[faseDe(cot)];
           var cli = cliDe(cot.clienteId);
           var nOf = (cot.ofertas || []).length;
           var dias = diasAbierta(cot);
@@ -334,7 +375,11 @@ window.App = window.App || {};
           h += '<div class="card lift" data-cz-ir="' + App.esc(cot.id) + '" style="cursor:pointer;margin-bottom:10px">' +
             '<div class="spread" style="align-items:flex-start"><div style="min-width:0;flex:1">' +
             '<div class="row-title wrap" style="font-size:15px">' + App.esc(cot.titulo || "Sin título") + "</div>" +
-            '<div class="row-sub">' + (cli ? App.esc(cli.nombre) + " · " : "") +
+            '<div class="row-sub">' + (function () {
+              var tc = (App.db.settings.tiendas || []).filter(function (t) { return t.id === cot.tienda; })[0];
+              if (tc) return App.esc((tc.emoji ? tc.emoji + " " : "") + (tc.corto || tc.nombre)) + " · ";
+              return cli ? App.esc(cli.nombre) + " · " : "";
+            })() +
             App.fmt.num(n(cot.cantidad)) + " " + App.esc(cot.unidad || "unidades") +
             " · " + App.fmt.fecha(cot.fecha) + "</div></div>" +
             '<span class="pill ' + est.pill + '">' + est.emoji + " " + est.label + "</span></div>";
@@ -348,8 +393,15 @@ window.App = window.App || {};
             '<span class="pill ' + (nOf >= 2 ? "info" : "warn") + '">🏭 ' + nOf + " fábrica" + (nOf === 1 ? "" : "s") + "</span>" +
             (nOf === 1 ? '<span class="pill warn">carga otra para comparar</span>' : "") +
             (nOf && !tarifa ? '<span class="pill warn">sin tarifa de flete</span>' : "") +
-            (cot.estado === "abierta" && dias > 7 ? '<span class="pill warn">⏰ ' + dias + " días abierta</span>" : "") +
+            (enProceso(cot) && dias > 7 ? '<span class="pill warn">⏰ ' + dias + " días en proceso</span>" : "") +
+            (gastoMuestras(cot) > 0 ? '<span class="pill tint">🧪 muestras ' + App.fmt.usd(gastoMuestras(cot)) + "</span>" : "") +
             "</div>";
+
+          /* dónde va el proceso: pasitos con la fase alcanzada */
+          if (faseIx(cot) >= 0) {
+            h += '<div class="small muted" style="margin-top:7px">Paso ' + (faseIx(cot) + 1) + " de " + FASES.length + " · " +
+              FASES.map(function (fs, fi) { return fi <= faseIx(cot) ? fs.emoji : "○"; }).join(" ") + "</div>";
+          }
 
           if (gan) {
             h += '<div class="spread" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--hairline)">' +
@@ -407,14 +459,29 @@ window.App = window.App || {};
       var tarifa = tarifaDe(cot.tarifaId);
       var filas = comparar(cot);
       var cli = cliDe(cot.clienteId);
-      var est = ESTADOS[cot.estado] || ESTADOS.abierta;
+      var est = ESTADOS[faseDe(cot)];
       var h = "";
 
       /* ---- cabecera ---- */
+      var tiendaCot = (App.db.settings.tiendas || []).filter(function (t) { return t.id === cot.tienda; })[0];
       h += '<div class="spread wrap" style="gap:8px;margin-bottom:8px">' +
         '<span class="pill ' + est.pill + '">' + est.emoji + " " + est.label + "</span>" +
         '<span class="small muted">' + App.fmt.fecha(cot.fecha) +
-        (cli ? " · " + App.esc(cli.nombre) : " · sin cliente asignado") + "</span></div>";
+        (tiendaCot ? " · para " + App.esc((tiendaCot.emoji ? tiendaCot.emoji + " " : "") + (tiendaCot.corto || tiendaCot.nombre))
+          : cli ? " · " + App.esc(cli.nombre) : " · sin destino asignado") + "</span></div>";
+
+      /* ---- el proceso: toca la fase en la que vas ---- */
+      if (cot.estado !== "descartada") {
+        var fx = faseIx(cot);
+        h += '<div class="pipe" style="margin-bottom:10px">' + FASES.map(function (fs, fi) {
+          return (fi ? '<div class="pipe-flecha">' + App.icon("chevR") + "</div>" : "") +
+            '<div class="pipe-step' + (fi <= fx ? " on" : "") + '" data-cz-fase="' + fs.id + '" title="' + App.esc(ESTADOS[fs.id].label) + '">' +
+            '<div class="pipe-n">' + fs.emoji + '</div><div class="pipe-l">' + fs.corto + "</div></div>";
+        }).join("") + "</div>";
+        var gm = gastoMuestras(cot);
+        if (gm > 0) h += '<div class="small muted" style="margin-bottom:10px">🧪 Invertido en muestras: <b class="num">' +
+          App.fmt.usd(gm) + "</b> (muestra + envío; es gasto de la búsqueda, no entra en el costo puesto)</div>";
+      }
 
       if (cot.descripcion) {
         h += '<div class="small texto-largo" style="margin-bottom:10px">' + App.esc(cot.descripcion) + "</div>";
@@ -550,15 +617,36 @@ window.App = window.App || {};
       h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(98px,1fr));gap:10px 12px;margin-top:11px">' +
         d.join("") + "</div>";
 
-      /* la muestra se ve, pero NO entra en el costo puesto */
       var extras = [];
-      if (f.muestra > 0) extras.push("Muestra: " + App.fmt.usd(f.muestra) + " (se paga aparte, no entra en el costo puesto)");
       if (f.oferta.validez) extras.push("Precio válido hasta el " + App.fmt.fecha(f.oferta.validez));
       if (!f.cumpleMoq) extras.push("Su mínimo son " + App.fmt.num(f.moq) + " y pides " + App.fmt.num(cant) + ": faltan " + App.fmt.num(f.faltanMoq));
       if (extras.length) {
         h += '<div class="small muted" style="margin-top:9px;line-height:1.5">' +
           extras.map(function (x) { return App.esc(x); }).join("<br>") + "</div>";
       }
+
+      /* ---- la muestra de ESTA fábrica: su costo, su envío y en qué va ---- */
+      var o = f.oferta;
+      var mTiene = f.muestra > 0 || o.muestraPedida || o.muestraEnvio;
+      var mLin = '<div style="margin-top:10px;padding:9px 11px;border-radius:11px;background:var(--field-bg)">' +
+        '<div class="spread wrap" style="gap:6px"><span class="small" style="font-weight:650">🧪 Muestra</span>' +
+        '<span class="flex wrap" style="gap:5px">' +
+        (o.muestraPedida ? '<span class="pill info">pedida ' + App.fmt.fecha(o.muestraPedida) + "</span>" : '<span class="pill">sin pedir</span>') +
+        (o.muestraRecibida ? '<span class="pill ok">llegó ' + App.fmt.fecha(o.muestraRecibida) + "</span>" : "") +
+        (o.muestraVeredicto === "ok" ? '<span class="pill ok">👍 aprobada</span>' : "") +
+        (o.muestraVeredicto === "no" ? '<span class="pill danger">👎 no sirvió</span>' : "") +
+        "</span></div>" +
+        (mTiene ? '<div class="small muted" style="margin-top:4px">Cuesta ' + App.fmt.usd(f.muestra) +
+          (n(o.muestraEnvio) > 0 ? " + " + App.fmt.usd(o.muestraEnvio) + " del envío" : "") +
+          " · gasto aparte, no entra en el costo puesto</div>" : "") +
+        '<div class="flex wrap" style="gap:6px;margin-top:7px">' +
+        (!o.muestraPedida ? '<button class="btn sm" data-cz-mu-pedir="' + App.esc(o.id) + '">🧪 Pedí la muestra</button>' : "") +
+        (o.muestraPedida && !o.muestraRecibida ? '<button class="btn sm" data-cz-mu-llego="' + App.esc(o.id) + '">📬 Ya llegó</button>' : "") +
+        (o.muestraRecibida && !o.muestraVeredicto ? '<button class="btn sm" data-cz-mu-ok="' + App.esc(o.id) + '">👍 Sirve</button>' +
+          '<button class="btn sm ghost" data-cz-mu-no="' + App.esc(o.id) + '">👎 No sirve</button>' : "") +
+        "</div></div>";
+      h += mLin;
+
       if (f.oferta.notas) {
         h += '<div class="small texto-largo" style="margin-top:7px">💬 ' + App.esc(f.oferta.notas) + "</div>";
       }
@@ -566,7 +654,7 @@ window.App = window.App || {};
       /* acciones */
       h += '<div class="flex wrap" style="gap:8px;margin-top:11px">' +
         (f.esGanadora
-          ? '<button class="btn sm primary" data-cz-importar="' + App.esc(f.oferta.id) + '">' + App.icon("orden") + " Crear importación</button>"
+          ? '<button class="btn sm primary" data-cz-importar="' + App.esc(f.oferta.id) + '">' + App.icon("orden") + " Primera compra</button>"
           : '<button class="btn sm primary" data-cz-elegir="' + App.esc(f.oferta.id) + '">✓ Elegir esta</button>') +
         '<button class="btn sm ghost" data-cz-of-editar="' + App.esc(f.oferta.id) + '">' + App.icon("editar") + "</button>" +
         '<button class="btn sm ghost" data-cz-of-borrar="' + App.esc(f.oferta.id) + '" style="color:var(--danger)">' + App.icon("basura") + "</button>" +
@@ -602,13 +690,56 @@ window.App = window.App || {};
       if (ta && ta.forwarderId) cot.forwarderId = ta.forwarderId;
       guardar();
     });
+    /* la fase se puede tocar directo (con sus reglas de sentido común) */
+    App.delegar(s.el, "click", "[data-cz-fase]", function (e, t) {
+      var f = t.dataset.czFase;
+      if ((f === "decidida" || f === "comprada") && !cot.ganadora) {
+        App.toast("Primero elige la fábrica ganadora con el botón \"Elegir esta\"", "err");
+        return;
+      }
+      if (f === faseDe(cot)) return;
+      cot.estado = f;
+      guardar();
+      App.toast(ESTADOS[f].emoji + " " + ESTADOS[f].label);
+    });
+
+    /* la muestra: pedirla, recibirla y el veredicto */
+    App.delegar(s.el, "click", "[data-cz-mu-pedir]", function (e, t) {
+      var of = ofertaDe(t.dataset.czMuPedir);
+      if (!of) return;
+      of.muestraPedida = App.hoyISO();
+      if (["busqueda", "seleccion", "abierta"].indexOf(cot.estado) >= 0 || !ESTADOS[cot.estado]) cot.estado = "muestras";
+      guardar();
+      App.toast("🧪 Muestra pedida a " + sinPunto(nomProv(of)) + ". Ponle su costo y su envío con ✏️");
+    });
+    App.delegar(s.el, "click", "[data-cz-mu-llego]", function (e, t) {
+      var of = ofertaDe(t.dataset.czMuLlego);
+      if (!of) return;
+      of.muestraRecibida = App.hoyISO();
+      guardar();
+      App.toast("📬 Muestra recibida - pruébala y dale el veredicto");
+    });
+    App.delegar(s.el, "click", "[data-cz-mu-ok]", function (e, t) {
+      var of = ofertaDe(t.dataset.czMuOk);
+      if (!of) return;
+      of.muestraVeredicto = "ok";
+      guardar();
+      App.toast("👍 Aprobada. Si es la elegida, dale a \"Elegir esta\"");
+    });
+    App.delegar(s.el, "click", "[data-cz-mu-no]", function (e, t) {
+      var of = ofertaDe(t.dataset.czMuNo);
+      if (!of) return;
+      of.muestraVeredicto = "no";
+      guardar();
+    });
+
     App.delegar(s.el, "click", "[data-cz-elegir]", function (e, t) {
       var of = ofertaDe(t.dataset.czElegir);
       if (!of) return;
       cot.ganadora = of.id;
       cot.estado = "decidida";
       guardar();
-      App.toast("Elegida: " + nomProv(of));
+      App.toast("Elegida: " + sinPunto(nomProv(of)));
     });
     App.delegar(s.el, "click", "[data-cz-importar]", function (e, t) {
       var of = ofertaDe(t.dataset.czImportar);
@@ -633,7 +764,7 @@ window.App = window.App || {};
           cot.ofertas = (cot.ofertas || []).filter(function (o) { return o.id !== of.id; });
           if (cot.ganadora === of.id) {
             cot.ganadora = null;
-            if (cot.estado === "decidida") cot.estado = "abierta";
+            if (cot.estado === "decidida") cot.estado = faseRetro(cot);
           }
           guardar();
           App.toast("Fábrica quitada de la comparación");
@@ -645,13 +776,13 @@ window.App = window.App || {};
       App.toast("Cotización descartada");
     });
     App.delegar(s.el, "click", "[data-cz-reabrir]", function () {
-      cot.estado = cot.ganadora ? "decidida" : "abierta";
+      cot.estado = cot.ganadora ? "decidida" : faseRetro(cot);
       guardar();
-      App.toast("Cotización reabierta");
+      App.toast("Búsqueda reabierta");
     });
     App.delegar(s.el, "click", "[data-cz-desganar]", function () {
       cot.ganadora = null;
-      if (cot.estado === "decidida") cot.estado = "abierta";
+      if (cot.estado === "decidida" || cot.estado === "comprada") cot.estado = faseRetro(cot);
       guardar();
     });
     App.delegar(s.el, "click", "[data-cz-borrar]", function () {
@@ -733,10 +864,16 @@ window.App = window.App || {};
         '<div class="field full"><label>Descripción y especificaciones</label><textarea class="textarea" id="cz-desc" placeholder="Material, medidas, color, empaque, lo que le pediste a las fábricas…">' +
         App.esc(orig ? orig.descripcion : "") + "</textarea></div>" +
         '<div class="field"><label>Cliente (opcional)</label><select class="select" id="cz-cli">' +
-        '<option value="">Sin cliente / para stock</option>' +
+        '<option value="">Sin cliente</option>' +
         clis.map(function (c) {
           return '<option value="' + App.esc(c.id) + '"' + (orig && orig.clienteId === c.id ? " selected" : "") +
             ">" + App.esc(c.nombre) + "</option>";
+        }).join("") + "</select></div>" +
+        '<div class="field"><label>O para una tienda tuya</label><select class="select" id="cz-tienda">' +
+        '<option value="">No es para una tienda</option>' +
+        (App.db.settings.tiendas || []).map(function (t) {
+          return '<option value="' + App.esc(t.id) + '"' + (orig && orig.tienda === t.id ? " selected" : "") +
+            ">" + App.esc((t.emoji ? t.emoji + " " : "") + t.nombre) + "</option>";
         }).join("") + "</select></div>" +
         '<div class="field"><label>Fecha</label><input class="input" id="cz-fecha" type="date" value="' +
         App.esc(orig ? orig.fecha : App.hoyISO()) + '"></div>' +
@@ -756,12 +893,13 @@ window.App = window.App || {};
       var cant = Math.max(0, parseInt(App.$("#cz-f-cant", s.el).value, 10) || 0);
 
       var destino = orig || {
-        id: App.uid("cz"), estado: "abierta", ofertas: [], ganadora: null,
+        id: App.uid("cz"), estado: "busqueda", ofertas: [], ganadora: null,
         forwarderId: null, tarifaId: null, creadoEl: App.hoyISO()
       };
       destino.titulo = titulo;
       destino.descripcion = App.$("#cz-desc", s.el).value.trim();
       destino.clienteId = App.$("#cz-cli", s.el).value || null;
+      destino.tienda = App.$("#cz-tienda", s.el).value || "";
       destino.fecha = App.$("#cz-fecha", s.el).value || App.hoyISO();
       destino.cantidad = cant;
       destino.unidad = App.$("#cz-uni", s.el).value.trim() || "unidades";
@@ -803,8 +941,10 @@ window.App = window.App || {};
         (orig ? n(o.moq) : "") + '" placeholder="100"></div>' +
         '<div class="field"><label>Días de producción</label><input class="input num" id="of-dias" type="number" step="1" min="0" value="' +
         (orig ? n(o.diasProduccion) : "") + '" placeholder="25"></div>' +
-        '<div class="field"><label>Precio de la muestra (USD)</label><input class="input num" id="of-muestra" type="number" step="0.01" min="0" value="' +
+        '<div class="field"><label>Costo de la muestra (USD)</label><input class="input num" id="of-muestra" type="number" step="0.01" min="0" value="' +
         (orig ? n(o.precioMuestra) : "") + '" placeholder="0"></div>' +
+        '<div class="field"><label>Envío de la muestra (USD)</label><input class="input num" id="of-mu-envio" type="number" step="0.01" min="0" value="' +
+        (orig ? n(o.muestraEnvio) : "") + '" placeholder="0"></div>' +
         '<div class="field"><label>Peso por unidad (kg)</label><input class="input num" id="of-peso" type="number" step="0.001" min="0" value="' +
         (orig ? n(o.pesoKgUnit) : "") + '" placeholder="1.8"></div>' +
         '<div class="field"><label>Volumen por unidad (m³)</label><input class="input num" id="of-cbm" type="number" step="0.0001" min="0" value="' +
@@ -831,6 +971,7 @@ window.App = window.App || {};
       destino.pesoKgUnit = Math.max(0, parseFloat(App.$("#of-peso", s.el).value) || 0);
       destino.cbmUnit = Math.max(0, parseFloat(App.$("#of-cbm", s.el).value) || 0);
       destino.precioMuestra = Math.max(0, parseFloat(App.$("#of-muestra", s.el).value) || 0);
+      destino.muestraEnvio = Math.max(0, parseFloat(App.$("#of-mu-envio", s.el).value) || 0);
       destino.validez = App.$("#of-validez", s.el).value || null;
       destino.notas = App.$("#of-notas", s.el).value.trim();
 

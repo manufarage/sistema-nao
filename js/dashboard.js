@@ -152,10 +152,12 @@ window.App = window.App || {};
             : dl === 0 ? '<span class="pill warn">llega HOY</span>'
               : '<span class="pill info">' + dl + " día" + (dl === 1 ? "" : "s") + "</span>";
         var fw = (App.db.forwarders || []).filter(function (f) { return f.id === i.forwarderId; })[0];
+        var barquito = (["embarcada", "transito"].indexOf(i.estado) >= 0 && App.modImportaciones.travesia)
+          ? App.modImportaciones.travesia(i, true) : "";
         return '<div class="mini-row" data-imp="' + App.esc(i.id) + '">' +
           '<div class="mini-main"><div class="mini-title">' + App.esc((i.codigo ? i.codigo + " · " : "") + i.titulo) + "</div>" +
           '<div class="mini-sub">' + App.esc(fw ? fw.nombre : "") + (i.buque ? " · 🛳 " + App.esc(i.buque) : "") +
-          (i.bl ? " · BL " + App.esc(i.bl) : "") + "</div></div>" + pill + "</div>";
+          (i.bl ? " · BL " + App.esc(i.bl) : "") + "</div>" + barquito + "</div>" + pill + "</div>";
       }).join("");
     }
     cLlegadas += "</div>";

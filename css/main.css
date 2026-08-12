@@ -1213,11 +1213,15 @@ body::before { transform: translateZ(0); } /* la aurora vive en su propia capa *
   }
   .sidebar .logo-row, .sidebar .side-item, .sidebar .side-user, .sidebar .rate-pill { white-space: nowrap; }
 
-  /* lo que se desvanece al plegar */
+  /* nada de barra de scroll a la vista: el riel navega igual con la rueda */
+  .sidebar .side-nav { scrollbar-width: none; }
+  .sidebar .side-nav::-webkit-scrollbar { display: none; }
+
+  /* lo que se desvanece al plegar (el avatar y los iconos se quedan) */
   .sidebar .logo-row > div:last-child,
   .sidebar .side-item > span,
   .sidebar [data-sync-estado],
-  .sidebar .side-user > div,
+  .sidebar .side-user > div:nth-child(2),
   .sidebar #side-tema,
   .sidebar #side-salir {
     transition: opacity var(--t-fast) var(--ease);
@@ -1225,20 +1229,50 @@ body::before { transform: translateZ(0); } /* la aurora vive en su propia capa *
   .sidebar:not(:hover):not(:focus-within) .logo-row > div:last-child,
   .sidebar:not(:hover):not(:focus-within) .side-item > span,
   .sidebar:not(:hover):not(:focus-within) [data-sync-estado],
-  .sidebar:not(:hover):not(:focus-within) .side-user > div,
+  .sidebar:not(:hover):not(:focus-within) .side-user > div:nth-child(2),
   .sidebar:not(:hover):not(:focus-within) #side-tema,
   .sidebar:not(:hover):not(:focus-within) #side-salir {
     opacity: 0;
     pointer-events: none;
   }
+  .sidebar:not(:hover):not(:focus-within) [data-sync-estado],
+  .sidebar:not(:hover):not(:focus-within) #side-tema,
+  .sidebar:not(:hover):not(:focus-within) #side-salir {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+
+  /* plegado: todo centrado en el riel */
+  .side-item, .logo-row, .side-user {
+    transition: padding var(--t-med) var(--ease), justify-content var(--t-med) var(--ease);
+  }
+  .sidebar:not(:hover):not(:focus-within) .side-item {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .sidebar:not(:hover):not(:focus-within) .logo-row {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .sidebar:not(:hover):not(:focus-within) .side-user {
+    justify-content: center;
+    padding: 8px 6px;
+  }
+
   /* la etiqueta de grupo se vuelve una línea fina cuando está plegada */
   .sidebar:not(:hover):not(:focus-within) .side-label {
     font-size: 0;
     height: 1px;
     background: var(--hairline);
-    margin: 10px 8px 8px;
+    margin: 10px 16px 8px;
     padding: 0;
   }
+  .sidebar:not(:hover):not(:focus-within) .side-sep { margin: 10px 16px 8px; }
+
   /* la tasa se queda en su moneda */
   .sidebar .rate-pill .flag { font-size: 15px; }
   .sidebar:not(:hover):not(:focus-within) .rate-pill {
@@ -1332,3 +1366,60 @@ html[data-theme="dark"] .pipe-step.on { border-color: rgba(90, 169, 224, 0.25); 
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ============================================================
+   NAO — travesía: el barco avanzando entre China y el destino.
+   El avance real sale de las fechas (zarpe → llegada estimada).
+   ============================================================ */
+.travesia { margin-top: 10px; }
+.travesia .tv-linea { position: relative; height: 28px; }
+.travesia .tv-linea::before {
+  content: "";
+  position: absolute;
+  left: 28px; right: 28px; top: 50%;
+  border-top: 2px dashed rgba(20, 86, 127, 0.30);
+  transform: translateY(-50%);
+}
+html[data-theme="dark"] .travesia .tv-linea::before { border-top-color: rgba(90, 169, 224, 0.30); }
+.travesia .tv-hecho {
+  position: absolute;
+  left: 28px; top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, var(--marino), var(--jade));
+  border-radius: 2px;
+}
+.travesia .tv-origen, .travesia .tv-destino {
+  position: absolute; top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+}
+.travesia .tv-origen { left: 0; }
+.travesia .tv-destino { right: 0; }
+.travesia .tv-barco {
+  position: absolute; top: 50%;
+  font-size: 20px;
+  transform: translate(-50%, -58%);
+  filter: drop-shadow(0 2px 3px rgba(10, 30, 45, 0.30));
+  animation: tv-flota 2.8s ease-in-out infinite;
+}
+@keyframes tv-flota {
+  0%, 100% { transform: translate(-50%, -62%) rotate(-3deg); }
+  50% { transform: translate(-50%, -46%) rotate(3deg); }
+}
+@media (prefers-reduced-motion: reduce) { .travesia .tv-barco { animation: none; } }
+.travesia .tv-pies {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.3px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
+.travesia.mini { margin-top: 6px; }
+.travesia.mini .tv-linea { height: 20px; }
+.travesia.mini .tv-linea::before { left: 22px; right: 22px; }
+.travesia.mini .tv-hecho { left: 22px; }
+.travesia.mini .tv-barco { font-size: 15px; }
+.travesia.mini .tv-origen, .travesia.mini .tv-destino { font-size: 12.5px; }
+.travesia.mini .tv-pies { font-size: 10.5px; }
